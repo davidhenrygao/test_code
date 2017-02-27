@@ -91,7 +91,9 @@ int ReadPipe(int fd, void* buf, size_t len) {
       printf("Pipe write end has been close.\n");
       return -1;
     }
-    total += ret;
+    if (ret > 0) {
+      total += ret;
+    }
   }
   return 0;
 }
@@ -220,13 +222,11 @@ void* ServerRountine(void* arg) {
       }
     }
     if (FD_ISSET(g_srch.rfd, &rfs)) {
-      printf("ServerRountine read service channel.\n");
       ret = ReadPipe(g_srch.rfd, (void*)&resp, sizeof(resp));
       if (ret == -1) {
         printf("ServerRountine read service channel error.\n");
         goto ServerRountineEnd;
       } else {
-        printf("test return resp: %d.\n", resp);
         ret2 = WritePipe(g_rrch.wfd, (void*)&resp, sizeof(resp));
         if (ret2 == -1) {
           printf("ServerRountine write request channel error.\n");
@@ -250,7 +250,6 @@ void* InnerServerRountine(void* arg) {
   int ret, ret2;
   int maxfd;
   fd_set rfs;
-  //struct timeval timeout;
   pthread_t tid;
   int buf[10];
   int pos = 0;
@@ -260,9 +259,6 @@ void* InnerServerRountine(void* arg) {
   while (1) {
     FD_ZERO(&rfs);
     FD_SET(g_swch.rfd, &rfs);
-    //timeout.tv_sec = 10;
-    //timeout.tv_usec = 0;
-    //ret = select(maxfd, &rfs, NULL, NULL, &timeout);
     ret = select(maxfd, &rfs, NULL, NULL, NULL);
     if (ret == -1) {
       printf("InnerServerRountine select error: %s.\n", 
@@ -303,12 +299,16 @@ InnerServerRountineEnd:
   return NULL;
 }
 
+//pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
 void* WorkRoutine(void* arg) {
   long r = rand() % 10 + 1;
   int ret;
   printf("Request %d sleep %ld seconds.\n", *(int*)arg, r);
   sleep((unsigned int)r);
+  //pthread_mutex_lock(&lock);
   ret = WritePipe(g_srch.wfd, arg, sizeof(int));
+  //pthread_mutex_unlock(&lock);
   if (ret != 0) {
     printf("WorkRoutine write service channel error.\n");
   }
