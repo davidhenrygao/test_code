@@ -63,11 +63,11 @@ int main(int argc, char *argv[]) {
 }
 
 #define MAX_WRITE_TRY_TIMES 10
-//#define MAX_READ_TRY_TIMES 100
+#define MAX_READ_TRY_TIMES 10
 #define PIPE_ATOMIC_SIZE 4096
 
 int ReadPipe(int fd, void* buf, size_t len) {
-  //int maxtry = MAX_READ_TRY_TIMES;
+  int maxtry = MAX_READ_TRY_TIMES;
   size_t total = 0;
   size_t left = 0;
   size_t rlen = 0;
@@ -77,9 +77,8 @@ int ReadPipe(int fd, void* buf, size_t len) {
     rlen = left;
     ret = read(fd, buf+total, rlen);
     if (ret == -1) {
-      //if ((errno == EAGAIN || errno == EWOULDBLOCK) && (maxtry > 0)) {
-      if ((errno == EAGAIN || errno == EWOULDBLOCK)) {
-        //maxtry--;
+      if ((errno == EAGAIN || errno == EWOULDBLOCK) && (maxtry > 0)) {
+        maxtry--;
         sleep(1);
       } else {
         printf("Read pipe error: %s.\n", 
@@ -152,6 +151,8 @@ void* ClientRountine(void* arg) {
   size_t wbs = 0;
   size_t total;
   int ret;
+  int maxfd;
+  fd_set rfs;
   for (i = 0; i < 10; ++i) {
     buf[i] = i;
   }
@@ -160,10 +161,20 @@ void* ClientRountine(void* arg) {
   if (ret != 0) {
     goto ClientRountineEnd;
   }
+  maxfd = g_rrch.rfd + 1;
   for (i = 0; i < 10; ++i) {
-    ret = ReadPipe(g_rrch.rfd, (void*)(buf+i), sizeof(int));
-    if (ret != 0) {
+    FD_SET(g_rrch.rfd, &rfs);
+    ret = select(maxfd, &rfs, NULL, NULL, NULL);
+    if (ret == -1) {
+      printf("ClientRountineEnd select error: %s.\n", 
+          strerror_r(errno, err_buf, MAX_ERR_BUF_LEN));
       goto ClientRountineEnd;
+    }
+    if (FD_ISSET(g_rrch.rfd, &rfs)) {
+      ret = ReadPipe(g_rrch.rfd, (void*)(buf+i), sizeof(int));
+      if (ret != 0) {
+        goto ClientRountineEnd;
+      }
     }
   }
   printf("Return result: \n");
