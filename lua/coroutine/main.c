@@ -8,8 +8,13 @@
 #include <time.h>
 #include <signal.h>
 #include <sys/select.h>
+#include <assert.h>
 
-//#include "lua.h"
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+
+#include "pipeop.h"
 
 typedef void* (ThreadRoutine)(void*);
 
@@ -20,6 +25,16 @@ typedef union Channel {
     int wfd;
   };
 }Channel_t;
+
+typedef struct {
+  int req;
+  int session;
+}ServiceReq;
+
+typedef struct {
+  int resp;
+  int session;
+}ServiceResp;
 
 #define MAX_ERR_BUF_LEN 128
 char err_buf[MAX_ERR_BUF_LEN];
@@ -32,12 +47,19 @@ Channel_t g_swch; //service write channel
 void OpenChannel(Channel_t *);
 void CreateThread(pthread_t *, ThreadRoutine *);
 
+lua_State *L;
+lua_State* CreateLuaMachine();
+int LoadEntranceScript(lua_State *, const char *);
+int DoRequest(int, int);
+int DoResponse(ServiceResp, int);
+
 ThreadRoutine ClientRountine;
 ThreadRoutine ServerRountine;
 ThreadRoutine InnerServerRountine;
 ThreadRoutine WorkRoutine;
 
 int main(int argc, char *argv[]) {
+  int ret;
   pthread_t client_td;
   pthread_t server_td;
   pthread_t inner_server_td;
@@ -51,6 +73,12 @@ int main(int argc, char *argv[]) {
   OpenChannel(&g_srch);
   OpenChannel(&g_swch);
 
+  L = CreateLuaMachine();
+  ret = LoadEntranceScript(L, "script/entrance.lua");
+  if (ret != LUA_OK) {
+    return -1;
+  }
+
   CreateThread(&client_td, &ClientRountine);
   CreateThread(&server_td, &ServerRountine);
   CreateThread(&inner_server_td, &InnerServerRountine);
@@ -59,66 +87,6 @@ int main(int argc, char *argv[]) {
   pthread_join(server_td, NULL);
   pthread_join(inner_server_td, NULL);
 
-  return 0;
-}
-
-#define MAX_WRITE_TRY_TIMES 10
-#define MAX_READ_TRY_TIMES 10
-#define PIPE_ATOMIC_SIZE 4096
-
-int ReadPipe(int fd, void* buf, size_t len) {
-  int maxtry = MAX_READ_TRY_TIMES;
-  size_t total = 0;
-  size_t left = 0;
-  size_t rlen = 0;
-  ssize_t ret;
-  while (total < len) {
-    left = len - total;
-    rlen = left;
-    ret = read(fd, buf+total, rlen);
-    if (ret == -1) {
-      if ((errno == EAGAIN || errno == EWOULDBLOCK) && (maxtry > 0)) {
-        maxtry--;
-        sleep(1);
-      } else {
-        printf("Read pipe error: %s.\n", 
-            strerror_r(errno, err_buf, MAX_ERR_BUF_LEN));
-        return ret;
-      }
-    }
-    if (ret == 0) {
-      printf("Pipe write end has been close.\n");
-      return -1;
-    }
-    if (ret > 0) {
-      total += ret;
-    }
-  }
-  return 0;
-}
-
-int WritePipe(int fd, void* buf, size_t len) {
-  int maxtry = MAX_WRITE_TRY_TIMES;
-  size_t total = 0;
-  size_t left = 0;
-  size_t wlen = 0;
-  ssize_t ret;
-  while (total < len) {
-    left = len - total;
-    wlen = left < PIPE_ATOMIC_SIZE ? left : PIPE_ATOMIC_SIZE;
-    ret = write(fd, buf+total, wlen);
-    if (ret == -1) {
-      if ((errno == EAGAIN || errno == EWOULDBLOCK) && (maxtry > 0)) {
-        maxtry--;
-        sleep(1);
-      } else {
-        printf("Write pipe error: %s.\n", 
-            strerror_r(errno, err_buf, MAX_ERR_BUF_LEN));
-        return ret;
-      }
-    }
-    total += wlen;
-  }
   return 0;
 }
 
@@ -198,6 +166,9 @@ void* ServerRountine(void* arg) {
   int ret, ret2;
   int maxfd;
   fd_set rfs;
+  int session;
+  ServiceReq request;
+  ServiceResp response;
   //struct timeval timeout;
 
   maxfd = g_rwch.rfd > g_srch.rfd ? g_rwch.rfd + 1 : g_srch.rfd + 1;
@@ -225,22 +196,34 @@ void* ServerRountine(void* arg) {
         printf("ServerRountine read requst channel error.\n");
         goto ServerRountineEnd;
       } else {
-        ret2 = WritePipe(g_swch.wfd, (void*)&req, sizeof(req));
-        if (ret2 == -1) {
-          printf("ServerRountine write service channel error.\n");
+        ret2 = DoRequest(req, g_swch.wfd);
+        if (ret2 != LUA_OK) {
+          printf("ServerRountine DoRequest error.\n");
           break;
         }
+        //request.req = req;
+        //request.session = session;
+        //ret2 = WritePipe(g_swch.wfd, (void*)&request, sizeof(request));
+        //if (ret2 == -1) {
+          //printf("ServerRountine write service channel error.\n");
+          //break;
+        //}
       }
     }
     if (FD_ISSET(g_srch.rfd, &rfs)) {
-      ret = ReadPipe(g_srch.rfd, (void*)&resp, sizeof(resp));
+      ret = ReadPipe(g_srch.rfd, (void*)&response, sizeof(response));
       if (ret == -1) {
         printf("ServerRountine read service channel error.\n");
         goto ServerRountineEnd;
       } else {
-        ret2 = WritePipe(g_rrch.wfd, (void*)&resp, sizeof(resp));
-        if (ret2 == -1) {
-          printf("ServerRountine write request channel error.\n");
+        //ret2 = WritePipe(g_rrch.wfd, (void*)&(response.resp), sizeof(int));
+        //if (ret2 == -1) {
+          //printf("ServerRountine write request channel error.\n");
+          //break;
+        //}
+        ret2 = DoResponse(response, g_rrch.wfd);
+        if (ret2 != LUA_OK) {
+          printf("ServerRountine DoResponse error.\n");
           break;
         }
       }
@@ -262,8 +245,10 @@ void* InnerServerRountine(void* arg) {
   int maxfd;
   fd_set rfs;
   pthread_t tid;
-  int buf[10];
+  ServiceReq buf[10];
   int pos = 0;
+  ServiceReq request;
+  ServiceResp response;
 
   maxfd = g_swch.rfd + 1;
 
@@ -281,18 +266,20 @@ void* InnerServerRountine(void* arg) {
       break;
     }
     if (FD_ISSET(g_swch.rfd, &rfs)) {
-      ret = ReadPipe(g_swch.rfd, (void*)&req, sizeof(req));
+      ret = ReadPipe(g_swch.rfd, (void*)&request, sizeof(request));
       if (ret == -1) {
         printf("InnerServerRountine read service channel error.\n");
         goto InnerServerRountineEnd;
       } else {
-        buf[pos] = req;
+        buf[pos] = request;
         ret2 = pthread_create(&tid, NULL, &WorkRoutine, (void*)(buf+pos));
         pos++;
         if (ret2 != 0) {
           printf("InnerServerRountine create work thread error: %s.\n", 
               strerror_r(ret, err_buf, MAX_ERR_BUF_LEN));
-          ret2 = WritePipe(g_srch.wfd, (void*)&req, sizeof(req));
+          response.resp = request.req;
+          response.session = request.session;
+          ret2 = WritePipe(g_srch.wfd, (void*)&response, sizeof(response));
           if (ret2 != 0) {
             printf("InnerServerRountine write service channel error.\n");
             break;
@@ -315,13 +302,111 @@ InnerServerRountineEnd:
 void* WorkRoutine(void* arg) {
   long r = rand() % 10 + 1;
   int ret;
-  printf("Request %d sleep %ld seconds.\n", *(int*)arg, r);
+  ServiceReq *preq = (ServiceReq*)arg;
+  ServiceResp response;
+  printf("Request %d (session %d) sleep %ld seconds.\n", 
+      preq->req, preq->session, r);
   sleep((unsigned int)r);
   //pthread_mutex_lock(&lock);
-  ret = WritePipe(g_srch.wfd, arg, sizeof(int));
+  response.resp = preq->req;
+  response.session = preq->session;
+  ret = WritePipe(g_srch.wfd, (void*)&response, sizeof(ServiceResp));
   //pthread_mutex_unlock(&lock);
   if (ret != 0) {
     printf("WorkRoutine write service channel error.\n");
   }
   return arg;
+}
+
+lua_State *CreateLuaMachine() {
+  lua_State *L = luaL_newstate();
+  luaL_openlibs(L);
+  return L;
+}
+
+int LoadEntranceScript(lua_State *L, const char *script) {
+  int ret;
+  if (L == NULL) {
+    printf("LoadEntranceScript lua_State* parameter is NULL.\n");
+    return -1;
+  }
+  ret = luaL_loadfile(L, script);
+  if (ret != LUA_OK) {
+    printf("LoadEntranceScript load script error: %d.\n", ret);
+    return ret;
+  }
+  ret = lua_pcall(L, 0, LUA_MULTRET, 0);
+  if (ret != LUA_OK) {
+    printf("LoadEntranceScript execute script error:%d.\n\t%s.\n", 
+        ret, lua_tostring(L, -1));
+    lua_pop(L, 1);
+    return ret;
+  }
+  return ret;
+}
+
+int DoRequest(int req, int swch_wfd) {
+  int msgh;
+  int ret;
+  if(lua_istable(L, 1) == 0) {
+    printf("Entrance script haven't been loaded.\n");
+    return -1;
+  }
+  lua_pushstring(L, "debugTrace");
+  lua_rawget(L, 1);
+  if (lua_isnil(L, -1)) {
+    printf("debugTrace entrance can't be found.\n");
+    lua_settop(L, 1);
+    return -1;
+  }
+  msgh = lua_gettop(L);
+  lua_pushstring(L, "doRequest");
+  lua_rawget(L, 1);
+  if (lua_isnil(L, -1)) {
+    printf("doRequest entrance can't be found.\n");
+    lua_settop(L, 1);
+    return -1;
+  }
+  lua_pushinteger(L, req);
+  lua_pushinteger(L, swch_wfd);
+  ret = lua_pcall(L, 2, LUA_MULTRET, msgh);
+  if (ret != LUA_OK) {
+    printf("DoRequest pcall error: %d.\n", ret);
+    return ret;
+  }
+  lua_settop(L, 1);
+  return ret;
+}
+
+int DoResponse(ServiceResp resp, int rrch_wfd) {
+  int msgh;
+  int ret;
+  if(lua_istable(L, 1) == 0) {
+    printf("Entrance script haven't been loaded.\n");
+    return -1;
+  }
+  lua_pushstring(L, "debugTrace");
+  lua_rawget(L, 1);
+  if (lua_isnil(L, -1)) {
+    printf("debugTrace entrance can't be found.\n");
+    lua_settop(L, 1);
+    return -1;
+  }
+  msgh = lua_gettop(L);
+  lua_pushstring(L, "doResponse");
+  lua_rawget(L, 1);
+  if (lua_isnil(L, -1)) {
+    printf("DoResponse entrance can't be found.\n");
+    lua_settop(L, 1);
+    return -1;
+  }
+  lua_pushinteger(L, resp.resp);
+  lua_pushinteger(L, resp.session);
+  lua_pushinteger(L, rrch_wfd);
+  ret = lua_pcall(L, 3, LUA_MULTRET, msgh);
+  if (ret != LUA_OK) {
+    printf("DoResponse pcall error: %d.\n", ret);
+    return ret;
+  }
+  return ret;
 }
