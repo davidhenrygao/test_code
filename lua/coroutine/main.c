@@ -15,6 +15,7 @@
 #include "lauxlib.h"
 
 #include "pipeop.h"
+#include "def.h"
 
 typedef void* (ThreadRoutine)(void*);
 
@@ -25,16 +26,6 @@ typedef union Channel {
     int wfd;
   };
 }Channel_t;
-
-typedef struct {
-  int req;
-  int session;
-}ServiceReq;
-
-typedef struct {
-  int resp;
-  int session;
-}ServiceResp;
 
 #define MAX_ERR_BUF_LEN 128
 char err_buf[MAX_ERR_BUF_LEN];
