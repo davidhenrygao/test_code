@@ -65,6 +65,9 @@ int main(int argc, char *argv[]) {
   OpenChannel(&g_swch);
 
   L = CreateLuaMachine();
+  if (L == NULL) {
+    return -1;
+  }
   ret = LoadEntranceScript(L, "lua_script/entrance.lua");
   if (ret != LUA_OK) {
     return -1;
@@ -310,8 +313,22 @@ void* WorkRoutine(void* arg) {
 }
 
 lua_State *CreateLuaMachine() {
+  int ret;
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
+  ret = luaL_loadfile(L, "lua_script/init.lua");
+  if (ret != LUA_OK) {
+    printf("CreateLuaMachine load init script error: %d.\n", ret);
+    lua_close(L);
+    return NULL;
+  }
+  ret = lua_pcall(L, 0, 0, 0);
+  if (ret != LUA_OK) {
+    printf("CreateLuaMachine  execute init script error:%d.\n\t%s.\n", 
+        ret, lua_tostring(L, -1));
+    lua_close(L);
+    return NULL;
+  }
   return L;
 }
 

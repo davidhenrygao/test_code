@@ -1,1 +1,2 @@
--Ilua_lib/include/
+-Ilua/include/
+-Iinc/

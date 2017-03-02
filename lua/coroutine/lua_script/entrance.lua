@@ -1,4 +1,5 @@
 local c = require "serverop"
+local c2 = require "serverop1"
 
 local tCoroutine = {}
 
@@ -60,5 +61,8 @@ local handler = {
   doResponse = doResponse,
   debugTrace = debugTrace,
 }
+
+c2.call(1,2,3,4)
+c2.send(1)
 
 return handler
