@@ -13,20 +13,29 @@ end
 
 local genSession = getGenSessionFunc()
 
+local function handleCoroutineResumeResult(co, ...)
+  local result = select(1, ...)
+  if result == false then
+    local err_msg = select(2, ...)
+    print(debug.traceback(co, err_msg))
+  end
+  return result
+end
+
 local function doRequest(req, dest)
   print("In lua doRequest, req:", req, ", dest", dest)
   local s = genSession()
   local co = coroutine.create(function (request, session, reqdest)
       print("In coroutine", session, ", req:", request)
-      --print("request type:", type(request))
       local resp, sess, respdest = c.call(request, session, reqdest)
       print("Coroutine", sess, "resume", ", resp:", resp, "dest:", respdest)
-      print("resp type:", type(resp), "respdest type:", type(respdest))
       c.send(resp, respdest)
       print("Coroutine", sess, "end.")
   end)
-  coroutine.resume(co, req, s, dest)
-  tCoroutine[s] = co
+  local result = handleCoroutineResumeResult(co, coroutine.resume(co, req, s, dest))
+  if result then
+    tCoroutine[s] = co
+  end
   print("lua doRequest end, req:", req)
 end
 
@@ -36,7 +45,8 @@ local function doResponse(resp, session, dest)
   if co == nil then
       print("No coroutine correspond session:", session)
   else
-      coroutine.resume(co, resp, session, dest)
+      handleCoroutineResumeResult(co, coroutine.resume(co, resp, session, dest))
+      tCoroutine[session] = nil
   end
   print("lua doResponse end, resp:", resp)
 end

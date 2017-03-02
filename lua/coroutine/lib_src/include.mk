@@ -1,0 +1,14 @@
+CUR_DIR:=lib_src
+LIB_SRC:=$(wildcard $(CUR_DIR)/*.c)
+LIB_OBJS:=$(LIB_SRC:.c=.o)
+
+PROJECT_LIB_PATH?=lib
+PROJECT_LIB:=base.a
+
+$(PROJECT_LIB_PATH):
+	mkdir $(PROJECT_LIB_PATH)
+
+$(PROJECT_LIB_PATH)/$(PROJECT_LIB): |$(PROJECT_LIB_PATH)
+$(PROJECT_LIB_PATH)/$(PROJECT_LIB): $(LIB_SRC:.c=.o)
+	$(AR) $@ $^
+	$(RANLIB) $@

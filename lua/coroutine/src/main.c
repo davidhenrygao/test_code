@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
   OpenChannel(&g_swch);
 
   L = CreateLuaMachine();
-  ret = LoadEntranceScript(L, "script/entrance.lua");
+  ret = LoadEntranceScript(L, "lua_script/entrance.lua");
   if (ret != LUA_OK) {
     return -1;
   }

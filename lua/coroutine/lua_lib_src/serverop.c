@@ -17,8 +17,8 @@ static int lsop_call(lua_State *L) {
         but there are only %d parameters.\n", 
         CALL_PARAM_CNT, arg_cnt);
   }
-  for (i = 0; i < CALL_PARAM_CNT; ++i) {
-    if (lua_isinteger(L, i) == 0) {
+  for (i = 1; i <= CALL_PARAM_CNT; ++i) {
+    if (lua_isnumber(L, i) == 0) {
       return luaL_argerror(L, i, "need a integer");
     }
   }
@@ -45,18 +45,14 @@ static int lsop_send(lua_State *L) {
         but there are only %d parameters.\n", 
         SEND_PARAM_CNT, arg_cnt);
   }
-  for (i = 0; i < SEND_PARAM_CNT; ++i) {
-    if (lua_isinteger(L, i) == 0) {
-      printf("what the fuck type you are.\n");
+  for (i = 1; i <= SEND_PARAM_CNT; ++i) {
+    if (lua_isnumber(L, i) == 0) {
       return luaL_argerror(L, i, "need a integer");
     }
   }
-  printf("lsop_send get params.\n");
   resp = lua_tointeger(L, 1);
   destfd = lua_tointeger(L, 2);
-  printf("lsop_send WritePipe begin.\n");
   ret = WritePipe(destfd, (void*)&resp, sizeof(resp));
-  printf("lsop_send WritePipe end, ret: %d.\n", ret);
   if (ret == -1) {
     return luaL_error(L, "write pipe(%d) error.\n", destfd);
   }
