@@ -35,3 +35,4 @@ program
 
 # Temporary files
 *.swp
+*.log

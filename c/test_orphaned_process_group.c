@@ -6,17 +6,34 @@
 
 void sig_hup_handler(int sig) {
   printf("child catch signal %d.\n", sig);
-  printf("child raise SIGSTOP to itself.\n");
-  if (raise(SIGSTOP) != 0) {
-    printf("child raise SIGSTOP failed.\n");
+}
+
+void sig_hup_handler2(int sig) {
+  printf("child2 catch signal %d.\n", sig);
+  printf("child2 raise SIGKILL to itself.\n");
+  if (raise(SIGKILL) != 0) {
+    printf("child raise SIGKILL failed.\n");
   }
+}
+
+int set_signal_handler(int sig, void(*handler)(int)) {
+  struct sigaction act;
+  act.sa_handler = handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = 0;
+  return sigaction(sig, &act, NULL);
 }
 
 int main(int argc, char *argv[]) {
   pid_t pid;
-  struct sigaction act;
   int count = 0;
   printf("Program start.\n");
+  printf("parent set signal(SIGHUP) handler.\n");
+  //all its child will effect.
+  if (set_signal_handler(SIGHUP, sig_hup_handler) < 0) {
+    printf("parent set signal(SIGHUP) handler failed.\n");
+    exit(-1);
+  }
   pid = fork();
   if (pid > 0) {
     //parent process
@@ -24,21 +41,39 @@ int main(int argc, char *argv[]) {
     sleep(5);
     printf("parent send SIGSTOP to child.\n");
     kill(pid, SIGSTOP);
-    printf("parent exit.\n");
   } else {
     printf("child's pid is %d.\n", getpid());
-    printf("child set signal(SIGHUP) handler.\n");
-    act.sa_handler = sig_hup_handler;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    if (sigaction(SIGHUP, &act, NULL) < 0) {
-      printf("child set signal(SIGHUP) handler failed.\n");
-      exit(-1);
-    }
     while (1) {
       printf("child working: %d.\n", ++count);
       sleep(1);
+      if (count % 10 == 0) {
+        printf("child raise SIGSTOP to itself.\n");
+        if (raise(SIGSTOP) != 0) {
+          printf("child raise SIGSTOP failed.\n");
+        }
+      }
     }
+    exit(0);
   }
+
+  //fork the second child.
+  printf("parent fork the second child.\n");
+  pid = fork();
+  if (pid == 0) {
+    printf("child2(%d) start.\n", getpid());
+    printf("child2 reset SIGHUP handler.\n");
+    if (set_signal_handler(SIGHUP, sig_hup_handler2) < 0) {
+      printf("child2 reset SIGHUP handler failed.\n");
+      exit(-1);
+    }
+    while (1) {
+      printf("child2 sleep.\n");
+      sleep(1);
+      printf("child2 wakeup.\n");
+    }
+    exit(0);
+  }
+  sleep(5);
+  printf("parent exit.\n");
   return 0;
 }

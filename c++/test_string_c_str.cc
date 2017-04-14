@@ -44,5 +44,13 @@ int main(int argc, char *argv[]) {
   std::cout << "s2 length is: " << s2.length() << std::endl;
   std::cout << "s2 max size is: " << s2.max_size() << std::endl;
   std::cout << "s2 capacity is: " << s2.capacity() << std::endl;
+  string emptystr;
+  std::cout << emptystr << std::endl;
+  std::cout << "emptystr length is: " << emptystr.length() << std::endl;
+  std::cout << "emptystr max size is: " << emptystr.max_size() << std::endl;
+  std::cout << "emptystr capacity is: " << emptystr.capacity() << std::endl;
+  std::cout << "emptystr c_str is NULL: "<< boolalpha << 
+    bool(emptystr.c_str()==NULL) << std::endl;
+
   return 0;
 }
