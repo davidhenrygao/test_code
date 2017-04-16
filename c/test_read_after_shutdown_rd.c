@@ -38,33 +38,37 @@ int main(int argc, char *argv[]) {
     printf("connect server error: %s.\n", strerror(errno));
     return -1;
   }
-  for(;;) {
-    fgets(wbuf, BUFFERSIZE, stdin);
-    wb = write(sockfd, (void*)wbuf, strlen(wbuf)-1);
-    if (wb < 0) {
-      if (errno == EINVAL) {
-        continue;
-      }
-      printf("send msg to server error: %s.\n", strerror(errno));
-      break;
-    }
-    printf("send msg : %ld bytes.\n", wb);
-    rb = read(sockfd, (void*)rbuf, BUFFERSIZE-1);
-    if (rb < 0) {
-      if (errno == EINVAL) {
-        continue;
-      }
-      printf("recv msg to server error: %s.\n", strerror(errno));
-      break;
-    }
-    if (rb == 0) {
-      printf("socket peer end close.\n");
-      break;
-    }
-    rbuf[rb] = '\0';
-    printf("recv msg: %s.\n", rbuf);
-    sleep(3);
+  
+  strncpy(wbuf, "Fuck you!", 10);
+  wb = write(sockfd, (void*)wbuf, strlen(wbuf));
+  if (wb < 0) {
+    printf("send msg to server error: %s.\n", strerror(errno));
+    goto err;
   }
+  printf("send msg : %ld bytes.\n", wb);
+  rb = read(sockfd, (void*)rbuf, BUFFERSIZE-1);
+  if (rb < 0) {
+    printf("recv msg to server error: %s.\n", strerror(errno));
+    goto err;
+  }
+  if (rb == 0) {
+    printf("socket peer end close.\n");
+    goto err;
+  }
+  rbuf[rb] = '\0';
+  printf("recv msg: %s.\n", rbuf);
+  printf("shtudown read.\n");
+  shutdown(sockfd, SHUT_RD);
+  rb = read(sockfd, (void*)rbuf, BUFFERSIZE);
+  if (rb < 0) {
+    printf("recv msg to server error: %s.\n", strerror(errno));
+    goto err;
+  }
+  if (rb == 0) {
+    printf("socket peer end close.\n");
+    goto err;
+  }
+err:
   close(sockfd);
   return 0;
 }

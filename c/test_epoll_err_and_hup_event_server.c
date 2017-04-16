@@ -69,14 +69,18 @@ int main(int argc, char *argv[]) {
     ens = epoll_wait(epollfd, evs, MAX_EVENTS, -1);
     for (i = 0; i < ens; ++i) {
       if (evs[i].data.fd == sockfd) {
+        //memset(&cliaddr, 0, sizeof(cliaddr));
+        addrlen = sizeof(cliaddr);
         connfd = accept(sockfd, (struct sockaddr*)&cliaddr, &addrlen);
         printf("accept connection from %s:%u\n", 
             inet_ntoa(cliaddr.sin_addr), ntohs(cliaddr.sin_port));
         SetNonBlock(connfd);
         ev.events = EPOLLIN | EPOLLET;
         ev.data.fd = connfd;
+        printf("epoll add connfd %d.\n", connfd);
         epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev);
       } else {
+        printf("handle_data_sock.\n");
         handle_data_sock(epollfd, &evs[i]);
       }
     }
