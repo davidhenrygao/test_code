@@ -80,7 +80,6 @@ int main(int argc, char *argv[]) {
         printf("epoll add connfd %d.\n", connfd);
         epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev);
       } else {
-        printf("handle_data_sock.\n");
         handle_data_sock(epollfd, &evs[i]);
       }
     }
@@ -169,6 +168,7 @@ void* worker_thread_routine(void* arg) {
     //close(fd) or shutdown(fd, SHUT_RD) will not generate EPOLLHUP event.
     printf("shutdown fd(%d).\n", fd);
     shutdown(fd, SHUT_WR);
+    //shutdown(fd, SHUT_RD);
     //shutdown(fd, SHUT_RDWR);
     //printf("close fd(%d).\n", fd);
     //close(fd);
