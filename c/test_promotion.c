@@ -24,5 +24,15 @@ int main(int argc, char *argv[])
 	d = a + 10;
 	printf("c = %f\n", c);
 	printf("d = %ld\n", d);
+
+        int sa = -128;
+        unsigned int ua = 5;
+        if (sa < ua) {
+          printf("%d < %u \n", sa, ua);
+        } else if(sa == ua) {
+          printf("%d == %u \n", sa, ua);
+        } else {
+          printf("Aha! Oops: %d > %u \n", sa, ua);
+        }
 	return 0;
 }
